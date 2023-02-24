@@ -1,0 +1,32 @@
+/* REXX */                                                     
+ISFPREFIX = "*";                                               
+ISFOWNER  = "*";                                               
+                                                               
+RC_ISFCALLS = ISFCALLS('ON');                                  
+IF RC_ISFCALLS <> 0 THEN;                                      
+ DO;                                                           
+  SAY "ERREUR INIT - DéMARRAGE SERVICE ISPF IMPOSSIBLE...";    
+  EXIT 8;                                                      
+ END;                                                          
+                                                               
+ADDRESS SDSF;                                                  
+"ISFEXEC DA ";                                                 
+IF RC <> 0 THEN;                                               
+ DO;                                                           
+  MSG_EXIT = "ERREUR SDSF - NIVEAU PANEL...";                  
+  CALL SORTIE 8;                                               
+ END;     
+                                                                 
+SAY "JOBNAME  WORKLOAD SRVCLASS"                                
+SAY "-------- -------- --------"                                
+DO I = 1 TO ISFROWS;                                            
+ IF CPU.I < 1800 THEN;                                          
+  ALERTE = '-- OK';                                             
+ ELSE;                                                          
+  ALERTE = '-- ATTENTION !!!';                                  
+ SAY RIGHT(JNAME.I,8) RIGHT(WORKLOAD.I,8) RIGHT(SRVCLASS.I,8);  
+END;                                                            
+                                                                
+RC_ISFCALLS = ISFCALLS('OFF');                                  
+                                                                
+EXIT 0;                                                         
