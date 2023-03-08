@@ -1,0 +1,146 @@
+/* REXX **************************************************************/
+/* REXX EXECUTE PAR SOLVE USER.PROCLIB(DB2STSP)                      */
+/* 2019/11/06 - MODIF ORDRE SQL DE FIN                               */
+/* 2019/12/05 - AJOUT DE COMMENTAIRES                                */
+/* 2021/01/28 - MODIFICATION CONDITION SQL STATS.                    */
+/* 2021/--/-- - TODO: AJOUTER UN SELECT DE LA SYSPENDINGDDL         */
+/*****************************************************************OC**/
+SUBSYS    = SYSNAME()
+SAY "** EXECUTER SUR "TEXTM1" - DATE: "DATE()" TIME: "TIME()
+CALL DISPLAY 'D',"-DIS DB(B*) SPACE(*) RESTRICT LIMIT(*)"
+CALL DISPLAY 'D',"-DIS DB(B*) SPACE(*) ADVISORY LIMIT(*)"
+CALL DISPLAY 'D',"-DIS DB(B*) SPACE(*) CLAIMERS ONLY LIMIT(*)"
+CALL DISPLAY 'D',"-DIS DB(B*) SPACE(*) USE      ONLY LIMIT(*)"
+CALL DISPLAY 'D',"-DIS DB(B*) SPACE(*) LOCKS    ONLY LIMIT(*)"
+CALL DISPLAY 'D',"-DIS UTIL(*)"
+CALL DISPLAY 'D',"-DIS DB(B*)            RESTRICT(RO) LIMIT(*)"
+CALL DISPLAY 'D',"-DIS DB(PTDB) SPACE(*) RESTRICT LIMIT(*)"
+CALL DISPLAY 'D',"-DIS DB(PTDB) SPACE(*) CLAIMERS ONLY LIMIT(*)"
+CALL DISPLAY 'F',""
+/*********************************************************************/
+DELSTACK
+
+HTIME = TIME(HOURS)
+IF HTIME = '18' THEN DO
+  C_FIN   = " "
+  SAY "**    "
+  SAY "** LISTE DES MISES à JOUR DES TABLES."
+  SAY "** DéCLENCHEMENT DE CET ORDRE à 18H00."
+  ENT = "DBNAME   TSNAME     PART   NB_LIGNES      LASTSTATS"
+  ENT = ENT!!"                        NB_MAJ"
+  SAY ENT
+/*SAY "DBNAME  TSNAME      PART   NB_LIGNES      LASTSTATS        NB_MAJ"*/
+  CALL SQLLIST
+  RESUL=SQLSEL(1)
+  DO I = 1 TO RESUL
+     SAY WORD(OUTLIGNE.I,1),
+         WORD(OUTLIGNE.I,2),
+         RIGHT(WORD(OUTLIGNE.I,3),4),
+         RIGHT(WORD(OUTLIGNE.I,4),15),
+         WORD(OUTLIGNE.I,5),
+         RIGHT(WORD(OUTLIGNE.I,6),15)
+  END
+END
+SAY "**"
+SAY "** RAPPEL CPRO.PDS.ISPF.CLIST(DB2STSR)"
+SAY "** FIN"
+EXIT
+/*****************************************************************OC**/
+
+
+DISPLAY:
+/*********************************************************************/
+ARG   F,COMMANDEDB2
+IF F = 'D' THEN DO
+  SAY "** "TIME()" "COMMANDEDB2
+  QUEUE COMMANDEDB2
+END
+IF F = 'F' THEN DO
+  QUEUE 'END'
+  X=OUTTRAP(DISP.)
+  ADDRESS TSO "DSN SYS("SUBSYS")"
+  X=OUTTRAP(OFF)
+  /* -- TRAITEMENT --V1 PAS DE TRAITEMENT SPéCIFIQUE.  */
+  DO I = 1 TO DISP.0
+     SAY   DISP.I
+  END
+  /* -- TRAITEMENT -- */
+END
+RETURN
+/*****************************************************************OC**/
+
+SYSNAME:
+/**********************************************************************/
+SYSN    = MVSVAR(SYSNAME)
+TBDB2N  ="DB2S   DB2C DB2L DB2P DB2A    DB2V    DB2B"
+TBCRTN  ="RECT   RECT QUAL PROD RECT    QUAL    PROD"
+TBENVN  ="LP2    BRNR BRNQ BRN2 ESPRECT ESPQUAL ESPPROD"
+TBPF    ="CAT    CAT  CAT  CAT  BNP     BNP     BNP "
+TBEV    ="TEST RECETTE PRéPROD PROD RECETTE PRéPROD PROD"
+TEXTM1  =WORD(TBEV,WORDPOS(SYSN,TBENVN))" "WORD(TBPF,WORDPOS(SYSN,TBENVN))
+DB2NAME = WORD(TBDB2N,WORDPOS(SYSN,TBENVN))
+RETURN DB2NAME
+/**********************************************************************/
+
+SQLLIST:
+/*--------------------------------------------------------------------*/
+SQL.1 =,
+"SELECT DBNAME , NAME  , PARTITION , TOTALROWS         ",
+",STATSLASTTIME,STATSUPDATES                           ",
+"FROM SYSIBM.SYSTABLESPACESTATS                        ",
+"WHERE DBNAME LIKE 'B%'                                ",
+"AND DBNAME NOT LIKE 'BS%'                             ",
+"AND SUBSTR(DBNAME,3,2)  NOT IN ('FO')                 ",
+"AND SUBSTR(NAME,1,1) IN ('T','P','S')                 ",
+"AND STATSUPDATES > 0                                  ",
+"AND TOTALROWS > 0                                     ",
+"                                                      "
+/* ANCIEN ORDRE SQL */
+SQL.2 =,
+"SELECT DBNAME , NAME  , SUM(TOTALROWS) AS TOTALROWS   ",
+",MAX(STATSLASTTIME) AS LASTSTATS                      ",
+",SUM(STATSINSERTS+STATSDELETES+STATSUPDATES+STATSMASSDELETE) AS MAJ ",
+"FROM SYSIBM.SYSTABLESPACESTATS                        ",
+"WHERE DBNAME LIKE 'B____00_%'                         ",
+"AND SUBSTR(DBNAME,3,2)  NOT IN ('FO')                 ",
+"AND TOTALROWS > 0                                     ",
+"GROUP BY DBNAME , NAME                                ",
+"ORDER BY 5 DESC                                       "
+SQL.3 =,
+"SELECT DBNAME , NAME  , SUM(TOTALROWS) AS TOTALROWS   ",
+"FROM SYSIBM.SYSTABLESPACESTATS                        ",
+"WHERE DBNAME LIKE 'B____00_%'                         ",
+"AND SUBSTR(DBNAME,3,2)  NOT IN ('BR','GY','FO')       ",
+"AND TOTALROWS > 0                                     ",
+"GROUP BY DBNAME , NAME                                "
+RETURN
+/*--------------------------------------------------------------------*/
+
+SQLSEL:
+/*--------------------------------------------------------------------*/
+ARG SEL
+SQLSTMT = SQL.SEL
+SQL.0=""  ; OUTLIGNE. =""
+SRC = RXSUBCOM("ADD","DSNREXX","DSNREXX")
+ADDRESS DSNREXX
+"CONNECT" SUBSYS
+"EXECSQL DECLARE C1 CURSOR FOR S1"
+"EXECSQL PREPARE S1 INTO :OUT FROM :SQLSTMT"
+"EXECSQL OPEN C1"
+YI = 0 ; NLIGNE = 0
+IF SQLCODE = 0 THEN DO UNTIL SQLCODE = 100
+ "EXECSQL FETCH C1 USING DESCRIPTOR :OUT"
+ IF SQLCODE = 100 THEN LEAVE
+ YI = YI  + 1
+ NLIGNE = NLIGNE + 1
+ OUTLIGNE.YI = ""
+ DO XI=1 TO OUT.SQLD
+   OUTLIGNE.YI= OUTLIGNE.YI!!STRIP(OUT.XI.SQLDATA)" "C_FIN
+ END XI
+END
+ELSE SAY SQLCODE
+"EXECSQL CLOSE C1"
+"EXECSQL COMMIT WORK"
+"DISCONNECT"
+RETURN NLIGNE
+/*--------------------------------------------------------------------*/
